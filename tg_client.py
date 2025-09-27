@@ -266,10 +266,6 @@ async def main():
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
 
-        # Load filtered chats
-        cursor.execute("SELECT chat_id FROM filtered_chats")
-        filtered_chats = {row[0] for row in cursor.fetchall()}
-        logging.info(f"Loaded {len(filtered_chats)} filtered chats.")
 
         client = TelegramClient(SESSION_NAME, api_id, api_hash)
     except Exception as e:
@@ -295,7 +291,6 @@ async def main():
                         chat_id_to_add = int(event.message.text.split(" ")[2])
                         cursor.execute("INSERT OR IGNORE INTO filtered_chats (chat_id) VALUES (?)", (chat_id_to_add,))
                         conn.commit()
-                        filtered_chats.add(chat_id_to_add)
                         logging.info(f"Added chat {chat_id_to_add} to filter.")
                         await send_long_message(event, f"Chat {chat_id_to_add} added to filter.")
                     except (ValueError, IndexError):
@@ -308,8 +303,6 @@ async def main():
                         chat_id_to_del = int(event.message.text.split(" ")[2])
                         cursor.execute("DELETE FROM filtered_chats WHERE chat_id = ?", (chat_id_to_del,))
                         conn.commit()
-                        if chat_id_to_del in filtered_chats:
-                            filtered_chats.remove(chat_id_to_del)
                         logging.info(f"Removed chat {chat_id_to_del} from filter.")
                         await send_long_message(event, f"Chat {chat_id_to_del} removed from filter.")
                     except (ValueError, IndexError):
@@ -320,6 +313,8 @@ async def main():
                 if event.message.text == "/sbot list":
                     logging.info("Processing /sbot list command.")
                     response = "Filtered chats:\n"
+                    cursor.execute("SELECT chat_id FROM filtered_chats")
+                    filtered_chats = {row[0] for row in cursor.fetchall()}
                     for chat_id in filtered_chats:
                         cursor.execute("SELECT title FROM chats WHERE id = ?", (chat_id,))
                         result = cursor.fetchone()
@@ -330,6 +325,12 @@ async def main():
 
                 if event.message.text.startswith("/sbot sum"):
                     logging.info("Processing /sbot sum command.")
+
+                    # Reload filtered chats to get the latest changes
+                    cursor.execute("SELECT chat_id FROM filtered_chats")
+                    filtered_chats = {row[0] for row in cursor.fetchall()}
+                    logging.info(f"Loaded {len(filtered_chats)} filtered chats for summarization.")
+
                     parts = event.message.text.split(" ")
                     chat_id_filter = None
                     if len(parts) > 2:
