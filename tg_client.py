@@ -10,6 +10,8 @@ import logging
 from telethon import TelegramClient, events
 from telethon.tl.types import Channel, User
 from datetime import datetime, timedelta
+from collections import defaultdict
+import openai
 
 SESSION_NAME = 'tg_client'
 DB_NAME = 'telegram_messages.db'
