@@ -236,6 +236,16 @@ async def summarize_messages(messages, api_key, folder_id):
         return f"Error during summarization: {e}"
 
 
+async def send_long_message(event, message):
+    """Sends a long message by splitting it into chunks."""
+    if len(message) <= 4096:
+        await event.respond(message)
+        return
+
+    for i in range(0, len(message), 4096):
+        await event.respond(message[i:i + 4096])
+
+
 async def main():
     """
     Main function to connect to Telegram and listen for new messages.
@@ -287,10 +297,10 @@ async def main():
                         conn.commit()
                         filtered_chats.add(chat_id_to_add)
                         logging.info(f"Added chat {chat_id_to_add} to filter.")
-                        await event.respond(f"Chat {chat_id_to_add} added to filter.")
+                        await send_long_message(event, f"Chat {chat_id_to_add} added to filter.")
                     except (ValueError, IndexError):
                         logging.warning("Invalid /sbot add command format.")
-                        await event.respond("Invalid command format. Use /sbot add <chat_id>")
+                        await send_long_message(event, "Invalid command format. Use /sbot add <chat_id>")
                     return
 
                 if event.message.text.startswith("/sbot del "):
@@ -301,10 +311,10 @@ async def main():
                         if chat_id_to_del in filtered_chats:
                             filtered_chats.remove(chat_id_to_del)
                         logging.info(f"Removed chat {chat_id_to_del} from filter.")
-                        await event.respond(f"Chat {chat_id_to_del} removed from filter.")
+                        await send_long_message(event, f"Chat {chat_id_to_del} removed from filter.")
                     except (ValueError, IndexError):
                         logging.warning("Invalid /sbot del command format.")
-                        await event.respond("Invalid command format. Use /sbot del <chat_id>")
+                        await send_long_message(event, "Invalid command format. Use /sbot del <chat_id>")
                     return
 
                 if event.message.text == "/sbot list":
@@ -315,7 +325,7 @@ async def main():
                         result = cursor.fetchone()
                         title = result[0] if result else "Unknown"
                         response += f"- {chat_id}: {title}\n"
-                    await event.respond(response)
+                    await send_long_message(event, response)
                     return
 
                 if event.message.text.startswith("/sbot sum"):
@@ -327,65 +337,65 @@ async def main():
                             chat_id_filter = int(parts[2])
                         except ValueError:
                             logging.warning("Invalid chat ID in /sbot sum command.")
-                            await event.respond("Invalid chat ID.")
+                            await send_long_message(event, "Invalid chat ID.")
                             return
 
                     llm_api_key, llm_folder_id = get_llm_credentials()
 
                     twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
                     
-                    chats_to_query = list(filtered_chats)
+                    chats_to_process = list(filtered_chats)
                     if chat_id_filter:
                         if chat_id_filter in filtered_chats:
-                            chats_to_query = [chat_id_filter]
+                            chats_to_process = [chat_id_filter]
                         else:
-                            await event.respond("Specified chat is not in the filter list.")
+                            await send_long_message(event, "Specified chat is not in the filter list.")
                             return
 
-                    query = f"""
-                        SELECT m.id, c.title, a.first_name, a.last_name, a.username, m.message, r.message
-                        FROM messages m
-                        JOIN chats c ON m.chat_id = c.id
-                        JOIN authors a ON m.author_id = a.id
-                        LEFT JOIN messages r ON m.reply_to_message_id = r.id
-                        WHERE m.is_new = 1 AND m.date > ? AND m.chat_id IN ({','.join('?'*len(chats_to_query))})
-                    """
-                    params = [twenty_four_hours_ago] + chats_to_query
+                    for chat_id in chats_to_process:
+                        query = f"""
+                            SELECT m.id, c.title, a.first_name, a.last_name, a.username, m.message, r.message
+                            FROM messages m
+                            JOIN chats c ON m.chat_id = c.id
+                            JOIN authors a ON m.author_id = a.id
+                            LEFT JOIN messages r ON m.reply_to_message_id = r.id
+                            WHERE m.is_new = 1 AND m.date > ? AND m.chat_id = ?
+                        """
+                        params = [twenty_four_hours_ago, chat_id]
 
-                    cursor.execute(query, params)
-                    messages_to_process = cursor.fetchall()
+                        cursor.execute(query, params)
+                        messages_to_process = cursor.fetchall()
 
-                    if not messages_to_process:
-                        await event.respond("No new messages to summarize.")
-                        return
+                        if not messages_to_process:
+                            continue
 
-                    message_ids_to_update = [m[0] for m in messages_to_process]
+                        message_ids_to_update = [m[0] for m in messages_to_process]
 
-                    messages_for_llm = []
-                    for row in messages_to_process:
-                        author_name = f"{row[2]} {row[3] if row[3] else ''}" if row[4] is None else row[4]
-                        messages_for_llm.append({
-                            'chat_title': row[1],
-                            'author_name': author_name,
-                            'text': row[5],
-                            'reply_to_text': row[6]
-                        })
+                        messages_for_llm = []
+                        for row in messages_to_process:
+                            author_name = f"{row[2]} {row[3] if row[3] else ''}" if row[4] is None else row[4]
+                            messages_for_llm.append({
+                                'chat_title': row[1],
+                                'author_name': author_name,
+                                'text': row[5],
+                                'reply_to_text': row[6]
+                            })
 
-                    summaries = []
-                    for i in range(0, len(messages_for_llm), BATCH_SIZE):
-                        batch = messages_for_llm[i:i + BATCH_SIZE]
-                        summary = await summarize_messages(batch, llm_api_key, llm_folder_id)
-                        summaries.append(summary)
+                        for i in range(0, len(messages_for_llm), BATCH_SIZE):
+                            batch = messages_for_llm[i:i + BATCH_SIZE]
+                            summary = await summarize_messages(batch, llm_api_key, llm_folder_id)
+                            batch_num = i // BATCH_SIZE + 1
+                            total_batches = (len(messages_for_llm) + BATCH_SIZE - 1) // BATCH_SIZE
+                            chat_title = messages_for_llm[0]['chat_title']
+                            await send_long_message(event, f"**Summary for {chat_title} (Part {batch_num}/{total_batches}):**\n\n{summary}")
 
-                    full_summary = "\n".join(summaries)
-                    await event.respond(full_summary)
+                        # Mark messages as not new
+                        if message_ids_to_update:
+                            cursor.execute(f"UPDATE messages SET is_new = 0 WHERE id IN ({','.join('?'*len(message_ids_to_update))})", message_ids_to_update)
+                            conn.commit()
+                            logging.info(f"Marked {len(message_ids_to_update)} messages as not new for chat {chat_id}.")
 
-                    # Mark messages as not new
-                    if message_ids_to_update:
-                        cursor.execute(f"UPDATE messages SET is_new = 0 WHERE id IN ({','.join('?'*len(message_ids_to_update))})", message_ids_to_update)
-                        conn.commit()
-                        logging.info(f"Marked {len(message_ids_to_update)} messages as not new.")
-
+                    await send_long_message(event, "Summarization complete.")
                     return
 
             if isinstance(chat, User) and chat.is_self:
