@@ -218,7 +218,7 @@ async def summarize_messages(messages, api_key, folder_id):
             model=f"gpt://{folder_id}/gpt-oss-20b/latest",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Текст для анализа: {formatted_messages}"}
+                {"role": "user", "content": f"Текст для анализа: {formatted_messages}"}
             ],
             temperature=0.3,
             max_tokens=1000
