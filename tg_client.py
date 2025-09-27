@@ -113,6 +113,7 @@ async def summarize_messages(messages, api_key, folder_id):
     for msg in messages:
         formatted_messages += f"Chat: {msg['chat_title']}\n"
         formatted_messages += f"Author: {msg['author_name']}\n"
+        formatted_messages += f"Link: {msg['link']}\n"
         if msg['reply_to_text']:
             formatted_messages += f"In reply to: {msg['reply_to_text']}\n"
         formatted_messages += f"Message: {msg['text']}\n---\n"
@@ -200,8 +201,9 @@ async def summarize_messages(messages, api_key, folder_id):
 
 ### Общие требования:
 - Краткость: Максимум 2-3 предложения на пункт
+- На важные моменты надо оставлять ссылку на сообщение
 - Приоритизация: Самое важное — в начало каждой секции
-- Деперсонализация: Избегай упоминания конкретных участников (если не критично)
+- Деперсонализация: Избегай упоминания конкретных участников, если это не критично
 - Группировка: Объединяй похожие темы и дублирующуюся информацию
 - Нейтральность: Избегай субъективных оценок в итоговой сводке
 
@@ -351,7 +353,7 @@ async def main():
 
                     for chat_id in chats_to_process:
                         query = f"""
-                            SELECT m.id, c.title, a.first_name, a.last_name, a.username, m.message, r.message
+                            SELECT m.id, c.title, a.first_name, a.last_name, a.username, m.message, r.message, m.chat_id
                             FROM messages m
                             JOIN chats c ON m.chat_id = c.id
                             JOIN authors a ON m.author_id = a.id
@@ -372,6 +374,7 @@ async def main():
                         for row in messages_to_process:
                             author_name = f"{row[2]} {row[3] if row[3] else ''}" if row[4] is None else row[4]
                             messages_for_llm.append({
+                                'link': f"https://t.me/c/{row[7]}/{row[0]}",
                                 'chat_title': row[1],
                                 'author_name': author_name,
                                 'text': row[5],
