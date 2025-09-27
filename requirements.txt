@@ -1,0 +1,4 @@
+telethon
+yoyo-migrations
+pyinstaller
+openai
