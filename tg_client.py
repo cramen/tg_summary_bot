@@ -18,7 +18,7 @@ DB_NAME = 'telegram_messages.db'
 CONFIG_DIR = os.path.expanduser('~/.tg_bot')
 API_CONFIG_FILE = os.path.join(CONFIG_DIR, 'api.conf')
 LLM_CONFIG_FILE = os.path.join(CONFIG_DIR, 'llm.conf')
-BATCH_SIZE = 25
+BATCH_SIZE = 100
 
 
 def resource_path(relative_path):
@@ -215,7 +215,7 @@ async def summarize_messages(messages, api_key, folder_id):
 
     try:
         result = client.chat.completions.create(
-            model=f"gpt://{folder_id}/gpt-oss-20b/latest",
+            model=f"gpt://{folder_id}/gpt-oss-120b/latest",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Текст для анализа: {formatted_messages}"}
