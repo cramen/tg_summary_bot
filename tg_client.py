@@ -347,11 +347,7 @@ async def main():
                     
                     chats_to_process = list(filtered_chats)
                     if chat_id_filter:
-                        if chat_id_filter in filtered_chats:
-                            chats_to_process = [chat_id_filter]
-                        else:
-                            await send_long_message(event, "Specified chat is not in the filter list.")
-                            return
+                        chats_to_process = [chat_id_filter]
 
                     for chat_id in chats_to_process:
                         query = f"""
