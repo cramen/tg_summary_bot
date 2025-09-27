@@ -67,7 +67,7 @@ You can control the bot by sending commands to your "Saved Messages" in Telegram
 To package the application into a single, self-contained executable file, run the following command:
 
 ```bash
-pyinstaller --onefile --name tg_client --add-data "yoyo.ini:." --add-data "migrations:migrations" --hidden-import="openai" tg_client.py
+venv/bin/pyinstaller --onefile --name tg_client --add-data "yoyo.ini:." --add-data "migrations:migrations" --hidden-import="openai" tg_client.py
 ```
 
 This will create a single executable file named `tg_client` in the `dist` directory.
